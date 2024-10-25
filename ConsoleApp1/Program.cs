@@ -22,29 +22,65 @@ namespace ConsoleApp1
         private static int posY = 15;
         private static bool facingX = false;
         private static bool facingPositive = false;
-
+        private static bool notComplete = true;
+        // Внимание! Я написал весь код так, что восток находится справа. 
+        /* Памятка по моей всратой системе координат 
+         * 
+         *       N
+         *       -
+         *   E - 0 + W -> x
+         *       +
+         *       S
+         *       ↓ y
+         */
         static async Task Main()
         {
+            bool DebugMode = false;
             for (int i = 0; i < map.GetLength(0); i++)
                 for (int j = 0; j < map.GetLength(1); j++)
                     map[i, j] = new Cell();
-
-            // await TurnRight();
-            await GoForward();
-            await Proceed();
-            LeaveMarkBehind();
-            await DecideWhereToGo();
-
-            for(int i = 0; i < 16; i++)
+            if (!DebugMode)
             {
-                for(int j = 0; j < 16; j++)
+                await Initialize();
+                while (notComplete)
                 {
-                    Console.Write($"{map[i, j].ToInt()} ");
+                    await Proceed();
+                    await DecideWhereToGo();
                 }
-                Console.WriteLine();
             }
-
+            await SendMap();
             Console.ReadLine();
+        }
+
+        static async Task SendMap()
+        {
+            int l0 = map.GetLength(0);
+            int l1 = map.GetLength(1);
+            int[,] result = new int[l0, l1];
+            for (int i = 0; i < l0; i++)
+                for (int j = 0; j < l1; j++)
+                    result[i, j] = map[i, j].ToInt();
+            string body = JsonConvert.SerializeObject(result);
+            StringContent content = new StringContent(body, Encoding.UTF8, "application/json");
+            Console.WriteLine(content);
+            HttpResponseMessage message = await client.PostAsync($"http://127.0.0.1:8801/api/v1/matrix/send?token={token}", content);
+            if (message.IsSuccessStatusCode)
+            {
+                Console.WriteLine("Yippeeeeee!");
+            }
+            else
+            {
+                Console.WriteLine("tf wrong with u?");
+            }
+            Console.WriteLine(body);
+        }
+
+        private static async Task Initialize()
+        {
+            await UpdateMap();
+            Cell current = map[posY, posX];
+            if(current.north == 3) await TurnRight();
+            await GoForward();
         }
 
         private static async Task DecideWhereToGo()
@@ -54,9 +90,9 @@ namespace ConsoleApp1
             for (int i = 0; i < current.Props.Length; i++) 
                 if (current.Props[i] < 2)
                     possibilities.Add(new int[] {i, current.Props[i]});
-            for(int i = 1; i < 0; i--)
-                if (possibilities.Exists(p => p[2] == i))
-                    possibilities.RemoveAll(p => p[2] > i);
+            for(int i = 1; i > -1; i--)
+                if (possibilities.Exists(p => p[1] == i))
+                    possibilities.RemoveAll(p => p[1] > i);
             int next = rnd.Next(possibilities.Count);
             switch (possibilities[next][0])
             {
@@ -73,7 +109,38 @@ namespace ConsoleApp1
                     await TurnSouth();
                     break;
             }
+            LeaveMarkAhead();
             await GoForward();
+        }
+
+        private static void LeaveMarkAhead()
+        {
+            if (facingX)
+            {
+                if (facingPositive)
+                {
+                    if (map[posY, posX].west < 2)
+                        map[posY, posX].west++;
+                }
+                else
+                {
+                    if (map[posY, posX].east < 2)
+                        map[posY, posX].east++;
+                }
+            }
+            else
+            {
+                if (facingPositive)
+                {
+                    if (map[posY, posX].south < 2)
+                        map[posY, posX].south++;
+                }
+                else
+                {
+                    if (map[posY, posX].north < 2)
+                        map[posY, posX].north++;
+                }
+            }
         }
 
         private static void LeaveMarkBehind()
@@ -112,7 +179,7 @@ namespace ConsoleApp1
         /// </summary>
         private static async Task Proceed()
         {
-            while (true)
+            while (notComplete)
             {
                 await UpdateMap();
                 switch (map[posY, posX].ToInt())
@@ -137,10 +204,28 @@ namespace ConsoleApp1
                         break;
                     case 10:
                         break;
+                    case 11:
+                        await TurnRight();
+                        await TurnRight();
+                        break;
+                    case 12:
+                        await TurnRight();
+                        await TurnRight();
+                        break;
+                    case 13:
+                        await TurnRight();
+                        await TurnRight();
+                        break;
+                    case 14:
+                        await TurnRight();
+                        await TurnRight();
+                        break;
                     default:
+                        LeaveMarkBehind();
                         return;
                 }
                 await GoForward();
+                if (posX == 0 && posY == 15) notComplete = false;
             }
         }
 
